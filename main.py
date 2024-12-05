@@ -147,7 +147,7 @@ def send_message(user_id, message, keyboard=None):
         user_id=user_id,
         message=message,
         random_id=0,
-        keyboard=keyboard
+        keyboard=json.dumps(keyboard) if keyboard else None
     )
 
 # Обработка заявок с сайта
@@ -219,7 +219,17 @@ def handle_event(event):
 def create_keyboard(buttons):
     return {
         "one_time": False,
-        "buttons": [[{"action": {"type": "text", "label": btn}, "color": "primary"}] for btn in buttons]
+        "buttons": [
+            [
+                {
+                    "action": {
+                        "type": "text",
+                        "label": btn
+                    },
+                    "color": "primary"
+                }
+            ] for btn in buttons
+        ]
     }
 
 # Основной запуск
