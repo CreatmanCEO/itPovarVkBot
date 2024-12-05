@@ -2,5 +2,4 @@ vk_api>=11.9.9
 requests>=2.28.0
 flask>=2.0.0
 python-dotenv>=0.19.0
-logging
-datetime
+typing-extensions>=4.0.0
