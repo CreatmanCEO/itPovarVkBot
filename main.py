@@ -19,7 +19,7 @@ def send_to_telegram(message):
 
 # VK API
 vk_session = vk_api.VkApi(token=VK_TOKEN)
-longpoll = VkBotLongPoll(vk_session, "ID_СООБЩЕСТВА")
+longpoll = VkBotLongPoll(vk_session, 228564877)
 vk = vk_session.get_api()
 
 # VK отправка сообщений
