@@ -1,5 +1,6 @@
 import logging
 import vk_api
+import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -14,14 +15,14 @@ logger = logging.getLogger(__name__)
 
 class VKService:
     def __init__(self):
-        self.vk_session = vk_api.VkApi(token=VK_TOKEN)
-        self.longpoll = VkBotLongPoll(self.vk_session, VK_GROUP_ID)
-        self.vk = self.vk_session.get_api()
-        self.storage = StorageService()
-        self.user_states: Dict[int, str] = {}
-        self.user_data: Dict[int, Dict[str, Any]] = {}
+    self.vk_session = vk_api.VkApi(token=VK_TOKEN)
+    self.longpoll = VkBotLongPoll(self.vk_session, VK_GROUP_ID)
+    self.vk = self.vk_session.get_api()
+    self.storage = StorageService()
+    self.user_states: Dict[int, str] = {}
+    self.user_data: Dict[int, Dict[str, Any]] = {}
 
-     def send_message(self, user_id: int, message: str, keyboard=None):
+    def send_message(self, user_id: int, message: str, keyboard=None):
         """Отправка сообщения пользователю"""
         try:
             # Если keyboard уже в JSON формате, оставляем как есть
