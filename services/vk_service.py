@@ -21,14 +21,20 @@ class VKService:
         self.user_states: Dict[int, str] = {}
         self.user_data: Dict[int, Dict[str, Any]] = {}
 
-    def send_message(self, user_id: int, message: str, keyboard=None):
+     def send_message(self, user_id: int, message: str, keyboard=None):
         """Отправка сообщения пользователю"""
         try:
+            # Если keyboard уже в JSON формате, оставляем как есть
+            # Если это словарь - преобразуем в JSON
+            keyboard_json = keyboard
+            if isinstance(keyboard, dict):
+                keyboard_json = json.dumps(keyboard, ensure_ascii=False)
+
             self.vk.messages.send(
                 user_id=user_id,
                 message=message,
                 random_id=int(datetime.now().timestamp() * 1000),
-                keyboard=keyboard
+                keyboard=keyboard_json
             )
             logger.info(f"Сообщение отправлено пользователю {user_id}")
         except Exception as e:

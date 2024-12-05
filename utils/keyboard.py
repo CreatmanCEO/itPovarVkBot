@@ -1,3 +1,5 @@
+import json
+
 def create_keyboard(buttons, one_time=True):
     """
     Создание клавиатуры ВКонтакте
@@ -7,9 +9,9 @@ def create_keyboard(buttons, one_time=True):
         one_time (bool): Скрывать ли клавиатуру после нажатия
     
     Returns:
-        dict: Структура клавиатуры для VK API
+        str: JSON строка с клавиатурой для VK API
     """
-    return {
+    keyboard = {
         "one_time": one_time,
         "buttons": [[{
             "action": {
@@ -17,8 +19,10 @@ def create_keyboard(buttons, one_time=True):
                 "label": str(btn)[:40]
             },
             "color": "primary"
-        }] for btn in buttons]
+        }] for btn in buttons],
+        "inline": False
     }
+    return json.dumps(keyboard, ensure_ascii=False)
 
 def get_order_keyboard(order_id):
     """
@@ -28,7 +32,7 @@ def get_order_keyboard(order_id):
         order_id (int): Номер заявки
     
     Returns:
-        dict: Клавиатура с кнопками управления заявкой
+        str: JSON строка с клавиатурой для управления заявкой
     """
     buttons = [
         "Изменить заявку",
@@ -42,7 +46,7 @@ def get_main_keyboard():
     Создание главной клавиатуры
     
     Returns:
-        dict: Основная клавиатура с выбором категории услуг
+        str: JSON строка с основной клавиатурой
     """
     buttons = [
         "Услуги Населению",
