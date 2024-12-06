@@ -75,6 +75,10 @@ async def handle_form_submission(request):
             status=500
         )
 
+async def handle_root(request):
+    """Корневой маршрут для проверки работоспособности"""
+    return web.Response(text="IT-Помощь Поварово Bot is running")
+
 async def start_vk_bot():
     """Запуск бота ВКонтакте"""
     try:
@@ -86,15 +90,13 @@ async def start_vk_bot():
 async def init_app():
     """Инициализация веб-приложения"""
     app = web.Application()
+    app.router.add_get('/', handle_root)  # Добавляем корневой маршрут
     app.router.add_post('/submit', handle_form_submission)
     return app
 
 async def main():
     """Основная функция запуска"""
     try:
-        # Запускаем бота в отдельной таске
-        bot_task = asyncio.create_task(start_vk_bot())
-        
         # Запускаем веб-сервер
         app = await init_app()
         runner = web.AppRunner(app)
@@ -103,9 +105,12 @@ async def main():
         
         logger.info(f"Запуск веб-сервера на {APP_HOST}:{APP_PORT}")
         await site.start()
+
+        # Запускаем бота
+        bot_task = asyncio.create_task(start_vk_bot())
         
-        # Ждем выполнения всех задач
-        await asyncio.gather(bot_task)
+        # Ждем бесконечно
+        await asyncio.Event().wait()
         
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
