@@ -109,8 +109,11 @@ async def main():
         # Запускаем VK бота
         bot_task = asyncio.create_task(start_vk_bot())
         
-        # Ждем выполнения всех задач
-        await asyncio.gather(bot_task)
+        # Создаем бесконечную задачу для веб-сервера
+        web_task = asyncio.create_task(asyncio.Event().wait())
+        
+        # Ждем выполнения обеих задач
+        await asyncio.gather(web_task, bot_task)
         
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
