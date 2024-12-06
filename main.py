@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from pathlib import Path
 from aiohttp import web
 from flask import Flask, request, jsonify
@@ -101,22 +102,24 @@ async def main():
         app = await init_app()
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, APP_HOST, APP_PORT)
         
-        logger.info(f"Запуск веб-сервера на {APP_HOST}:{APP_PORT}")
+        # Явно указываем хост и порт
+        port = int(os.environ.get('PORT', APP_PORT))
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        
+        logger.info(f"Запуск веб-сервера на 0.0.0.0:{port}")
         await site.start()
+        logger.info("Веб-сервер успешно запущен")
 
-        # Запускаем VK бота
+        # Запускаем VK бота в отдельной задаче
         bot_task = asyncio.create_task(start_vk_bot())
-        
-        # Создаем бесконечную задачу для веб-сервера
-        web_task = asyncio.create_task(asyncio.Event().wait())
-        
-        # Ждем выполнения обеих задач
-        await asyncio.gather(web_task, bot_task)
+
+        # Бесконечное ожидание
+        await asyncio.Event().wait()
         
     except Exception as e:
-        logger.error(f"Критическая ошибка: {e}")
+        logger.error(f"Критическая ошибка: {e}", exc_info=True)
+        raise  # Явно поднимаем исключение, чтобы Render увидел ошибку
     finally:
         if 'runner' in locals():
             await runner.cleanup()
