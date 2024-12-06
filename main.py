@@ -98,31 +98,32 @@ async def init_app():
 async def main():
     """Основная функция запуска"""
     try:
-        # Запускаем веб-сервер
-        app = await init_app()
-        runner = web.AppRunner(app)
-        await runner.setup()
+        # Создаем Flask приложение
+        flask_app = Flask(__name__)
         
-        # Явно указываем хост и порт
-        port = int(os.environ.get('PORT', APP_PORT))
-        site = web.TCPSite(runner, '0.0.0.0', port)
-        
-        logger.info(f"Запуск веб-сервера на 0.0.0.0:{port}")
-        await site.start()
-        logger.info("Веб-сервер успешно запущен")
+        @flask_app.route('/')
+        def health_check():
+            return 'Service is running'
 
-        # Запускаем VK бота в отдельной задаче
+        # Запускаем Flask в отдельном потоке
+        from threading import Thread
+        def run_flask():
+            flask_app.run(host=APP_HOST, port=APP_PORT)
+        
+        web_thread = Thread(target=run_flask, daemon=True)
+        web_thread.start()
+        
+        logger.info(f"Веб-сервер запущен на {APP_HOST}:{APP_PORT}")
+
+        # Запускаем VK бота
         bot_task = asyncio.create_task(start_vk_bot())
-
-        # Бесконечное ожидание
-        await asyncio.Event().wait()
+        
+        # Ждем выполнения задачи бота
+        await bot_task
         
     except Exception as e:
-        logger.error(f"Критическая ошибка: {e}", exc_info=True)
-        raise  # Явно поднимаем исключение, чтобы Render увидел ошибку
-    finally:
-        if 'runner' in locals():
-            await runner.cleanup()
+        logger.error(f"Критическая ошибка: {e}")
+        raise
 
 if __name__ == "__main__":
     try:
