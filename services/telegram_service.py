@@ -2,7 +2,6 @@ import aiohttp
 import logging
 from datetime import datetime
 from typing import Optional, Any, Dict
-
 from config.config import TELEGRAM_WEBHOOK
 from models.schemas import Order
 from utils.helpers import OrderHelper, PhoneNumberHelper, TextHelper, DateTimeHelper
@@ -18,11 +17,13 @@ class TelegramService:
         order_number = OrderHelper.generate_order_number(order.id)
         status_emoji = OrderHelper.get_status_emoji('new')
         
+        business_type_text = f"Тип бизнеса: {order.business_type}\n" if order.business_type else ""
+        
         message = (
             f"{status_emoji} [ВК] Новая заявка {order_number}\n"
             f"От: {order.name}\n"
             f"Телефон: {PhoneNumberHelper.format_phone(order.phone)}\n"
-            f"{'Тип бизнеса: ' + order.business_type + '\n' if order.business_type else ''}"
+            f"{business_type_text}"
             f"Задача: {TextHelper.clean_text(order.task)}\n"
             f"Дата: {DateTimeHelper.format_datetime(order.created_at)}"
         )
