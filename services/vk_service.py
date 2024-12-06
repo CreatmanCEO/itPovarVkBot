@@ -133,15 +133,20 @@ class VKService:
             user_id = event.message.from_id
             message_text = event.message.text or ""
             
+            logger.info(f"Получено сообщение от пользователя {user_id}: {message_text}")
+            
             # Получаем состояние пользователя
             user_state = await self.get_or_create_user_state(user_id)
+            logger.info(f"Текущее состояние пользователя {user_id}: {user_state.state}")
             
             # Обрабатываем служебные команды
             if message_text.lower() == "отменить заявку":
+                logger.info(f"Пользователь {user_id} отменяет заявку")
                 await self.handle_cancel(user_id, user_state)
                 return
                 
             if message_text.lower() == "удалить заявку":
+                logger.info(f"Пользователь {user_id} удаляет заявку")
                 await self.handle_delete_order(user_id, user_state)
                 return
 
@@ -150,6 +155,7 @@ class VKService:
                 user_state,
                 message_text
             )
+            logger.info(f"Новое состояние для {user_id}: {new_state}")
 
             # Обновляем состояние пользователя
             user_state.state = new_state.name
@@ -165,10 +171,11 @@ class VKService:
 
             # Формируем и отправляем ответ
             keyboard = await self.build_keyboard(new_state, keyboard_data)
+            logger.info(f"Отправляем ответ пользователю {user_id}: {response_message[:100]}...")
             await self.send_message(user_id, response_message, keyboard)
-
+            
         except Exception as e:
-            logger.error(f"Ошибка при обработке сообщения: {e}")
+            logger.error(f"Ошибка при обработке сообщения: {e}", exc_info=True)
             await self.handle_error(user_id, e)
 
     async def build_keyboard(self, state: DialogState, data: Dict[str, Any]) -> dict:
