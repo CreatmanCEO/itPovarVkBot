@@ -1,3 +1,7 @@
+"""
+Конфигурация логирования для приложения
+"""
+
 import os
 from logging.handlers import RotatingFileHandler
 import logging
@@ -12,55 +16,30 @@ LOGGING_CONFIG = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'detailed': {
-            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            'datefmt': '%Y-%m-%d %H:%M:%S'
+        'standard': {
+            'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
         },
-        'simple': {
-            'format': '%(levelname)s - %(message)s'
-        }
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
             'level': 'INFO',
-            'formatter': 'simple',
+            'formatter': 'standard',
             'stream': 'ext://sys.stdout'
         },
         'file': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'level': 'DEBUG',
-            'formatter': 'detailed',
-            'filename': os.path.join(LOGS_DIR, 'bot.log'),
-            'maxBytes': 10485760,  # 10MB
-            'backupCount': 5,
-            'encoding': 'utf8'
-        },
-        'error_file': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'level': 'ERROR',
-            'formatter': 'detailed',
-            'filename': os.path.join(LOGS_DIR, 'error.log'),
-            'maxBytes': 10485760,  # 10MB
-            'backupCount': 5,
-            'encoding': 'utf8'
+            'class': 'logging.FileHandler',
+            'level': 'INFO',
+            'formatter': 'standard',
+            'filename': 'app.log',
+            'mode': 'a',
         }
     },
     'loggers': {
-        '': {  # Корневой логгер
+        '': {  # root logger
             'handlers': ['console', 'file'],
             'level': 'INFO',
             'propagate': True
-        },
-        'bot': {  # Логгер бота
-            'handlers': ['console', 'file', 'error_file'],
-            'level': 'DEBUG',
-            'propagate': False
-        },
-        'web': {  # Логгер веб-сервера
-            'handlers': ['console', 'file', 'error_file'],
-            'level': 'INFO',
-            'propagate': False
         }
     }
 }
