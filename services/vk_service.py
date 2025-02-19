@@ -24,15 +24,23 @@ class VKService:
             self.vk_session = vk_api.VkApi(token=VK_TOKEN)
             self.vk = self.vk_session.get_api()
             
-            # Проверяем подключение
+            # Проверяем подключение и получаем информацию о группе
             group_info = self.vk.groups.getById()[0]
             logger.info(f"VK API успешно инициализирован. Группа: {group_info['name']} (ID: {group_info['id']})")
             
-            # Проверяем настройки группы
-            group_settings = self.vk.groups.getSettings(group_id=VK_GROUP_ID)
-            if not group_settings.get('messages'):
-                logger.error("В группе отключены сообщения сообщества!")
-            logger.info("Настройки группы проверены")
+            # Проверяем возможность отправки сообщений
+            try:
+                self.vk.messages.getConversations(count=1)
+                logger.info("Доступ к сообщениям сообщества подтвержден")
+            except vk_api.exceptions.ApiError as e:
+                if e.code == 917:
+                    logger.error("В сообществе отключены сообщения!")
+                    raise
+                elif e.code == 27:
+                    logger.error("Недостаточно прав для работы с сообщениями сообщества!")
+                    raise
+                else:
+                    raise
             
             # Инициализация LongPoll
             try:
