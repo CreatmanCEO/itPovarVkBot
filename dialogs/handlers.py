@@ -73,6 +73,89 @@ class DialogHandler:
                     return DialogState.BUSINESS_TYPE_INPUT, STATE_MESSAGES[DialogState.BUSINESS_TYPE_INPUT], {"show_back": True}
                 else:
                     return current_state, "Пожалуйста, выберите тип услуг:", {"show_service_types": True}
+                    
+            elif current_state == DialogState.PERSONAL_TASK_INPUT:
+                message = TextHelper.clean_text(message)
+                if not message or len(message.strip()) < 10:
+                    return (
+                        DialogState.PERSONAL_TASK_INPUT,
+                        "Пожалуйста, опишите вашу задачу подробнее (минимум 10 символов):\n\n"
+                        "Например:\n"
+                        "- Нужна помощь с настройкой принтера\n"
+                        "- Не работает интернет\n"
+                        "- Требуется обучение работе с Excel\n\n"
+                        "Для отмены введите /cancel",
+                        {"show_back": True}
+                    )
+                    
+                user_state.temp_data["task"] = message
+                return (
+                    DialogState.CONTACT_INPUT,
+                    "Для связи с вами укажите, пожалуйста, номер телефона:\n"
+                    "Формат: 89991234567\n\n"
+                    "Для отмены введите /cancel",
+                    {"show_back": True}
+                )
+                
+            elif current_state == DialogState.CONTACT_INPUT:
+                if not PhoneNumberHelper.is_valid_phone(message):
+                    return (
+                        DialogState.CONTACT_INPUT,
+                        "Некорректный формат номера телефона. Пожалуйста, введите номер в формате: 89991234567\n\n"
+                        "Для отмены введите /cancel",
+                        {"show_back": True}
+                    )
+
+                user_state.temp_data["phone"] = PhoneNumberHelper.format_phone(message)
+                
+                # Формируем детали заявки для подтверждения
+                order_details = (
+                    f"Имя: {user_state.context['name']}\n"
+                    f"Телефон: {user_state.temp_data['phone']}\n"
+                    f"Описание: {user_state.temp_data['task']}"
+                )
+                
+                if user_state.temp_data.get("business_type"):
+                    order_details += f"\nТип бизнеса: {user_state.temp_data['business_type']}"
+                    
+                return (
+                    DialogState.ORDER_CONFIRMATION,
+                    f"Проверьте данные вашей заявки:\n\n{order_details}\n\nВсё верно?",
+                    {"show_confirmation": True}
+                )
+                
+            elif current_state == DialogState.ORDER_CONFIRMATION:
+                if message.lower() in ["подтвердить", "отправить заявку"]:
+                    # Создаем заявку
+                    order_id = await self.storage.create_order(
+                        user_id=user_state.user_id,
+                        name=user_state.context["name"],
+                        phone=user_state.temp_data["phone"],
+                        task=user_state.temp_data["task"],
+                        business_type=user_state.temp_data.get("business_type")
+                    )
+                    
+                    # Получаем созданную заявку
+                    order = await self.storage.get_order(order_id)
+                    if order:
+                        # Отправляем уведомление в Telegram
+                        await TelegramService.notify_new_order(order)
+                    
+                    # Очищаем временные данные
+                    user_state.temp_data = {}
+                    
+                    return (
+                        DialogState.FINISHED,
+                        f"Спасибо! Ваша заявка №{order_id} принята. "
+                        "Мы свяжемся с вами в ближайшее время.",
+                        {"show_main_menu": True}
+                    )
+                else:
+                    return (
+                        DialogState.CHOOSING_SERVICE_TYPE,
+                        "Хорошо, давайте заполним заявку заново. Выберите категорию услуг:",
+                        {"show_service_types": True}
+                    )
             
             # Если состояние не обработано, возвращаемся в главное меню
             logger.warning(f"Необработанное состояние {current_state}")
