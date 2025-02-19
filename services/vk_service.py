@@ -461,11 +461,10 @@ class VKService:
             while True:
                 try:
                     for event in self.longpoll.listen():
-                        logger.debug(f"Получено событие: {event.type}")
                         if event.type == VkBotEventType.MESSAGE_NEW:
                             logger.info(f"Получено новое сообщение от пользователя {event.message.from_id}")
-                            # Создаем задачу для асинхронной обработки сообщения
-                            asyncio.create_task(self.process_new_message(event))
+                            # Обрабатываем сообщение синхронно
+                            await self.process_new_message(event)
                 except vk_api.exceptions.ApiError as e:
                     logger.error(f"Ошибка API VK в цикле событий: {e}")
                     await asyncio.sleep(5)  # Ждем перед повторной попыткой
@@ -481,6 +480,10 @@ class VKService:
             # Останавливаем задачу очистки кэша
             if self.cache_cleanup_task:
                 self.cache_cleanup_task.cancel()
+                try:
+                    await self.cache_cleanup_task
+                except asyncio.CancelledError:
+                    pass
 
     async def stop(self) -> None:
         """Остановка бота"""

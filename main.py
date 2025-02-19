@@ -117,11 +117,14 @@ async def main():
         # Запускаем VK бота
         logger.info("Инициализация VK бота...")
         try:
+            # Запускаем бота и ждем его завершения
             await vk_service.run()
         except Exception as e:
             logger.error(f"Ошибка при запуске VK бота: {e}", exc_info=True)
             raise
         
+    except KeyboardInterrupt:
+        logger.info("Получен сигнал завершения работы...")
     except Exception as e:
         logger.error(f"Критическая ошибка при запуске приложения: {e}", exc_info=True)
         raise
@@ -138,6 +141,5 @@ if __name__ == "__main__":
         logger.info("Получен сигнал завершения работы...")
     except Exception as e:
         logger.error(f"Неожиданная ошибка при запуске: {e}", exc_info=True)
-        raise
     finally:
         logger.info("Приложение остановлено")
