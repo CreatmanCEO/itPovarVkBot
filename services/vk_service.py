@@ -191,10 +191,14 @@ class VKService:
                         "• /help - Получить помощь\n"
                         "• /cancel - Отменить текущее действие"
                     )
-                    keyboard = await self.build_keyboard(DialogState.START, {"show_start": True})
-                    await self.send_message(user_id, welcome_message, keyboard)
+                    await self.send_message(user_id, welcome_message)
                     user_state.context["greeted"] = True
                     await self.storage.set_user_state(str(user_id), user_state.state, user_state.context)
+                    
+                    # Показываем основное меню после приветствия
+                    menu_message = "Выберите действие:"
+                    keyboard = await self.build_keyboard(DialogState.MAIN_MENU, {"show_main_menu": True})
+                    await self.send_message(user_id, menu_message, keyboard)
                     return
                     
             except Exception as e:
@@ -323,16 +327,31 @@ class VKService:
             if not buttons:
                 buttons.append("В главное меню")
             
-            # Формируем клавиатуру
-            keyboard = {
-                "one_time": False,
-                "buttons": [[{
+            # Разбиваем кнопки на ряды по 2 кнопки
+            keyboard_buttons = []
+            row = []
+            
+            for btn in buttons:
+                row.append({
                     "action": {
                         "type": "text",
                         "label": btn[:40]  # Ограничение VK API
                     },
                     "color": "primary" if btn not in ["Отменить", "Назад", "В главное меню"] else "secondary"
-                }] for btn in buttons]
+                })
+                
+                if len(row) == 2:
+                    keyboard_buttons.append(row)
+                    row = []
+            
+            # Добавляем оставшиеся кнопки
+            if row:
+                keyboard_buttons.append(row)
+            
+            # Формируем клавиатуру
+            keyboard = {
+                "one_time": False,
+                "buttons": keyboard_buttons
             }
             
             logger.debug(f"Создана клавиатура с кнопками: {buttons}")
