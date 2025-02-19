@@ -1,8 +1,8 @@
 import aiohttp
 import logging
+import os
 from datetime import datetime
 from typing import Optional, Any, Dict
-from config.config import TELEGRAM_WEBHOOK
 from models.schemas import Order
 from utils.helpers import OrderHelper, PhoneNumberHelper, TextHelper, DateTimeHelper
 
@@ -11,9 +11,15 @@ logger = logging.getLogger(__name__)
 class TelegramService:
     """Сервис для отправки уведомлений в Telegram"""
     
+    WEBHOOK_URL = os.getenv("TELEGRAM_WEBHOOK", "https://telegram-form.creatmanick-850.workers.dev")
+    
     @staticmethod
     async def notify_new_order(order: Order) -> bool:
         """Уведомление о новой заявке"""
+        if not TelegramService.WEBHOOK_URL:
+            logger.warning("TELEGRAM_WEBHOOK не настроен, уведомления отключены")
+            return False
+            
         order_number = OrderHelper.generate_order_number(order.id)
         status_emoji = OrderHelper.get_status_emoji('new')
         
@@ -72,10 +78,14 @@ class TelegramService:
     @staticmethod
     async def _send_notification(message: str) -> bool:
         """Отправка уведомления в Telegram"""
+        if not TelegramService.WEBHOOK_URL:
+            logger.warning("TELEGRAM_WEBHOOK не настроен, уведомления отключены")
+            return False
+            
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    TELEGRAM_WEBHOOK,
+                    TelegramService.WEBHOOK_URL,
                     json={
                         "name": "VK Bot",
                         "phone": "System",
