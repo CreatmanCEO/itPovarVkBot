@@ -94,18 +94,32 @@ async def run_web_app():
 async def main():
     """Основная функция запуска"""
     try:
+        logger.info("Запуск приложения...")
+        
+        # Проверяем наличие необходимых переменных окружения
+        if not os.getenv('VK_TOKEN'):
+            logger.error("Не установлен токен VK API (VK_TOKEN)")
+            raise ValueError("VK_TOKEN is not set")
+            
         # Запускаем веб-сервер
+        logger.info(f"Запуск веб-сервера на {APP_HOST}:{APP_PORT}...")
         await run_web_app()
+        logger.info("Веб-сервер успешно запущен")
         
         # Запускаем VK бота
-        logger.info("Запуск VK бота...")
-        await vk_service.run()
+        logger.info("Инициализация VK бота...")
+        try:
+            await vk_service.run()
+        except Exception as e:
+            logger.error(f"Ошибка при запуске VK бота: {e}", exc_info=True)
+            raise
         
     except Exception as e:
-        logger.error(f"Критическая ошибка: {e}", exc_info=True)
+        logger.error(f"Критическая ошибка при запуске приложения: {e}", exc_info=True)
         raise
     finally:
         # Останавливаем бота при выходе
+        logger.info("Остановка приложения...")
         await vk_service.stop()
 
 if __name__ == "__main__":
@@ -113,6 +127,9 @@ if __name__ == "__main__":
         # Запускаем асинхронное приложение
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Завершение работы приложения...")
+        logger.info("Получен сигнал завершения работы...")
     except Exception as e:
-        logger.error(f"Неожиданная ошибка: {e}", exc_info=True)
+        logger.error(f"Неожиданная ошибка при запуске: {e}", exc_info=True)
+        raise
+    finally:
+        logger.info("Приложение остановлено")

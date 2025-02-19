@@ -18,18 +18,34 @@ logger = logging.getLogger(__name__)
 
 class VKService:
     def __init__(self):
-        # Инициализация VK API
-        self.vk_session = vk_api.VkApi(token=VK_TOKEN)
-        self.longpoll = VkBotLongPoll(self.vk_session, VK_GROUP_ID)
-        self.vk = self.vk_session.get_api()
+        try:
+            logger.info("Инициализация VK сервиса...")
+            # Инициализация VK API
+            self.vk_session = vk_api.VkApi(token=VK_TOKEN)
+            self.vk = self.vk_session.get_api()
+            
+            # Проверяем подключение
+            self.vk.groups.getById()
+            logger.info("VK API успешно инициализирован")
+            
+            # Инициализация LongPoll
+            self.longpoll = VkBotLongPoll(self.vk_session, VK_GROUP_ID)
+            logger.info("LongPoll успешно инициализирован")
 
-        # Инициализация сервисов
-        self.storage = StorageService()
-        self.dialog_handler = DialogHandler(self.storage)
-        
-        # Кэш состояний пользователей для оптимизации
-        self.user_states_cache: Dict[int, UserState] = {}
-        self.cache_cleanup_task = None
+            # Инициализация сервисов
+            self.storage = StorageService()
+            self.dialog_handler = DialogHandler(self.storage)
+            
+            # Кэш состояний пользователей для оптимизации
+            self.user_states_cache: Dict[int, UserState] = {}
+            self.cache_cleanup_task = None
+            
+        except vk_api.exceptions.ApiError as e:
+            logger.error(f"Ошибка API VK: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Ошибка при инициализации VK сервиса: {e}")
+            raise
 
     async def send_message(self, user_id: int, message: str, keyboard: Optional[dict] = None) -> bool:
         """
@@ -355,6 +371,15 @@ class VKService:
             # Запускаем задачу очистки кэша
             self.cache_cleanup_task = asyncio.create_task(self.cleanup_cache())
             
+            # Проверяем подключение перед запуском
+            try:
+                self.vk.groups.getById()
+                logger.info("Подключение к VK API активно")
+            except Exception as e:
+                logger.error(f"Ошибка подключения к VK API: {e}")
+                raise
+            
+            logger.info("Начинаю прослушивание событий...")
             # Основной цикл прослушивания событий
             for event in self.longpoll.listen():
                 try:
