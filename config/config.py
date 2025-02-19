@@ -10,15 +10,32 @@ LOG_DIR = BASE_DIR / 'logs'
 DATA_DIR.mkdir(exist_ok=True)
 LOG_DIR.mkdir(exist_ok=True)
 
+def validate_config():
+    """Проверка конфигурации"""
+    errors = []
+    
+    # Проверка VK токена
+    if not VK_TOKEN:
+        errors.append("Не установлен токен VK API (VK_TOKEN)")
+    elif len(VK_TOKEN) < 85:  # Минимальная длина валидного токена
+        errors.append("Токен VK API слишком короткий, возможно он недействителен")
+        
+    # Проверка ID группы
+    if not VK_GROUP_ID:
+        errors.append("Не установлен ID группы ВКонтакте (VK_GROUP_ID)")
+    elif VK_GROUP_ID <= 0:
+        errors.append("Некорректный ID группы ВКонтакте")
+    
+    if errors:
+        raise ValueError("\n".join(errors))
+
 # Токены и ID
-VK_TOKEN = "vk1.a.KX1Q0v6Y3C420UgfV7zPoDL4V1OOYdengHYQjQyh_MtFvYca-M_871lyF0-g_qe-9Hn-MNA02wU73OjyBvX9uhh9aM9Afp7wbiBupahqPAoPoUZnEFC-BArLAYJCzX6PpN5sNnlw_qS5HlN9OASoNrvbJ2PFkIF48Dn9uqMG4zB995jvF4sk100fSSHiL5HlgclOrOs7qovLJKeyulnm8A"
-VK_GROUP_ID = 228564877
-TELEGRAM_WEBHOOK = "https://telegram-form.creatmanick-850.workers.dev"
+VK_TOKEN = os.getenv("VK_TOKEN", "vk1.a.KX1Q0v6Y3C420UgfV7zPoDL4V1OOYdengHYQjQyh_MtFvYca-M_871lyF0-g_qe-9Hn-MNA02wU73OjyBvX9uhh9aM9Afp7wbiBupahqPAoPoUZnEFC-BArLAYJCzX6PpN5sNnlw_qS5HlN9OASoNrvbJ2PFkIF48Dn9uqMG4zB995jvF4sk100fSSHiL5HlgclOrOs7qovLJKeyulnm8A")
+VK_GROUP_ID = int(os.getenv("VK_GROUP_ID", "228564877"))
 
 # Настройки приложения
-APP_HOST = "0.0.0.0"
-APP_PORT = 5000
-MAX_ORDERS = 5  # Максимальное количество активных заявок для пользователя
+APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
+APP_PORT = int(os.getenv("APP_PORT", "5000"))
 
 # Пути к файлам
 DATABASE_PATH = DATA_DIR / 'orders.db'
@@ -63,3 +80,6 @@ DB_CONFIG = {
         'cache_size': -64000    # 64MB кэш
     }
 }
+
+# Проверяем конфигурацию при импорте
+validate_config()

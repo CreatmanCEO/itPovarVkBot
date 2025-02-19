@@ -25,12 +25,22 @@ class VKService:
             self.vk = self.vk_session.get_api()
             
             # Проверяем подключение
-            self.vk.groups.getById()
-            logger.info("VK API успешно инициализирован")
+            group_info = self.vk.groups.getById()[0]
+            logger.info(f"VK API успешно инициализирован. Группа: {group_info['name']} (ID: {group_info['id']})")
+            
+            # Проверяем настройки группы
+            group_settings = self.vk.groups.getSettings(group_id=VK_GROUP_ID)
+            if not group_settings.get('messages'):
+                logger.error("В группе отключены сообщения сообщества!")
+            logger.info("Настройки группы проверены")
             
             # Инициализация LongPoll
-            self.longpoll = VkBotLongPoll(self.vk_session, VK_GROUP_ID)
-            logger.info("LongPoll успешно инициализирован")
+            try:
+                self.longpoll = VkBotLongPoll(self.vk_session, VK_GROUP_ID)
+                logger.info("LongPoll успешно инициализирован")
+            except Exception as e:
+                logger.error(f"Ошибка инициализации LongPoll: {e}")
+                raise
 
             # Инициализация сервисов
             self.storage = StorageService()
@@ -172,6 +182,12 @@ class VKService:
                 message_text
             )
             logger.info(f"Новое состояние для {user_id}: {new_state}")
+
+            # Отправляем приветственное сообщение для нового пользователя
+            if user_state.state == DialogState.START.name and not user_state.context.get("greeted"):
+                welcome_message = "Здравствуйте! Я бот IT-Помощь. Чем могу помочь?"
+                await self.send_message(user_id, welcome_message)
+                user_state.context["greeted"] = True
 
             # Обновляем состояние пользователя
             user_state.state = new_state.name
@@ -373,24 +389,29 @@ class VKService:
             
             # Проверяем подключение перед запуском
             try:
-                self.vk.groups.getById()
-                logger.info("Подключение к VK API активно")
+                group_info = self.vk.groups.getById()[0]
+                logger.info(f"Подключение к VK API активно. Бот готов принимать сообщения в группе {group_info['name']}")
             except Exception as e:
                 logger.error(f"Ошибка подключения к VK API: {e}")
                 raise
             
             logger.info("Начинаю прослушивание событий...")
+            
             # Основной цикл прослушивания событий
-            for event in self.longpoll.listen():
+            while True:
                 try:
-                    # Обрабатываем только сообщения
-                    if event.type == VkBotEventType.MESSAGE_NEW:
-                        # Создаем задачу для асинхронной обработки сообщения
-                        asyncio.create_task(self.process_new_message(event))
-                        
+                    for event in self.longpoll.listen():
+                        logger.debug(f"Получено событие: {event.type}")
+                        if event.type == VkBotEventType.MESSAGE_NEW:
+                            logger.info(f"Получено новое сообщение от пользователя {event.message.from_id}")
+                            # Создаем задачу для асинхронной обработки сообщения
+                            asyncio.create_task(self.process_new_message(event))
+                except vk_api.exceptions.ApiError as e:
+                    logger.error(f"Ошибка API VK в цикле событий: {e}")
+                    await asyncio.sleep(5)  # Ждем перед повторной попыткой
                 except Exception as e:
-                    logger.error(f"Ошибка при обработке события: {e}", exc_info=True)
-                    continue
+                    logger.error(f"Ошибка при обработке событий: {e}", exc_info=True)
+                    await asyncio.sleep(5)  # Ждем перед повторной попыткой
                     
         except Exception as e:
             logger.error(f"Критическая ошибка в работе бота: {e}", exc_info=True)
@@ -400,7 +421,7 @@ class VKService:
             # Останавливаем задачу очистки кэша
             if self.cache_cleanup_task:
                 self.cache_cleanup_task.cancel()
-                
+
     async def stop(self) -> None:
         """Остановка бота"""
         logger.info("Остановка VK бота...")
