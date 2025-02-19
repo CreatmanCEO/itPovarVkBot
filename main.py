@@ -6,11 +6,19 @@ from pathlib import Path
 from aiohttp import web
 from flask import Flask, request, jsonify
 
-from config.logging_config import LOGGING_CONFIG
-from config.config import APP_HOST, APP_PORT, DATABASE_PATH
+from config.config import (
+    APP_HOST,
+    APP_PORT,
+    DATABASE_PATH,
+    LOGGING_CONFIG,
+    validate_config
+)
 from services.vk_service import VKService
 from services.storage_service import StorageService
 from utils.helpers import PhoneNumberHelper, TextHelper
+
+# Проверяем конфигурацию
+validate_config()
 
 # Настройка логирования
 logging.config.dictConfig(LOGGING_CONFIG)
