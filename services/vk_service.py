@@ -156,15 +156,15 @@ class VKService:
         self.user_states_cache[user_id] = state
         return state
         
-    async def process_new_message(self, event: Dict[str, Any]) -> None:
+    async def process_new_message(self, event) -> None:
         """Обработка нового сообщения"""
         try:
-            user_id = str(event['message']['from_id'])
-            message_text = event['message']['text']
+            user_id = str(event.message.from_id)
+            message_text = event.message.text
             logger.info(f"Получено новое сообщение от пользователя {user_id}: {message_text}")
 
             # Получаем информацию о пользователе
-            user_info = await self.get_user_info(user_id)
+            user_info = await self.get_user_info(int(user_id))
             if not user_info:
                 logger.error(f"Не удалось получить информацию о пользователе {user_id}")
                 return
@@ -178,7 +178,7 @@ class VKService:
                 await self.storage.set_user_state(
                     user_id=user_id,
                     state=DialogState.START.name,
-                    context={"name": user_info["name"]},
+                    context={"name": f"{user_info.get('first_name', '')} {user_info.get('last_name', '')}".strip()},
                     temp_data={}
                 )
                 user_state = await self.storage.get_user_state(user_id)
@@ -203,16 +203,17 @@ class VKService:
             )
 
             # Отправляем ответ пользователю
-            keyboard = self.build_keyboard(keyboard_data)
-            await self.send_message(user_id, response_text, keyboard)
+            keyboard = await self.build_keyboard(new_state, keyboard_data)
+            await self.send_message(int(user_id), response_text, keyboard)
             logger.info(f"Ответ успешно отправлен пользователю {user_id}")
 
         except Exception as e:
             logger.error(f"Ошибка при обработке сообщения: {str(e)}", exc_info=True)
-            await TelegramService.notify_error("message_processing", {
-                "user_id": user_id if 'user_id' in locals() else "unknown",
-                "error": str(e)
-            })
+            if 'user_id' in locals():
+                await TelegramService.notify_error("message_processing", {
+                    "user_id": user_id,
+                    "error": str(e)
+                })
 
     async def build_keyboard(self, state: DialogState, data: Dict[str, Any]) -> dict:
         """
@@ -268,11 +269,17 @@ class VKService:
                     "Помощь",
                     "В главное меню"
                 ])
-            
-            # Добавляем кнопку "Назад" если нужно
-            if data.get("show_back") and "Назад" not in buttons:
-                buttons.append("Назад")
                 
+            elif data.get("show_confirmation"):
+                buttons.extend([
+                    "Подтвердить",
+                    "Изменить",
+                    "Отменить"
+                ])
+                
+            elif data.get("show_back"):
+                buttons.extend(["Назад", "Отменить"])
+            
             # Если кнопок нет, добавляем кнопку возврата в меню
             if not buttons:
                 buttons.append("В главное меню")
