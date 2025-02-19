@@ -81,8 +81,8 @@ class VKService:
             # Подготовка клавиатуры
             keyboard_json = json.dumps(keyboard, ensure_ascii=False) if keyboard else None
             
-            # Генерация random_id
-            random_id = int(datetime.now().timestamp() * 1000)
+            # Генерация random_id на основе времени и user_id для уникальности
+            random_id = int((datetime.now().timestamp() * 1000) + user_id)
             
             # Отправка сообщения
             await asyncio.get_event_loop().run_in_executor(
@@ -159,12 +159,13 @@ class VKService:
     async def process_new_message(self, event) -> None:
         """Обработка нового сообщения"""
         try:
-            user_id = str(event.message.from_id)
+            # Получаем ID пользователя и текст сообщения
+            user_id = event.message.from_id
             message_text = event.message.text
             logger.info(f"Получено новое сообщение от пользователя {user_id}: {message_text}")
 
             # Получаем информацию о пользователе
-            user_info = await self.get_user_info(int(user_id))
+            user_info = await self.get_user_info(user_id)
             if not user_info:
                 logger.error(f"Не удалось получить информацию о пользователе {user_id}")
                 return
@@ -172,16 +173,16 @@ class VKService:
             logger.info(f"Информация о пользователе {user_id}: {user_info}")
 
             # Получаем текущее состояние пользователя
-            user_state = await self.storage.get_user_state(user_id)
+            user_state = await self.storage.get_user_state(str(user_id))
             if not user_state:
                 logger.info(f"Создаем новое состояние для пользователя {user_id}")
                 await self.storage.set_user_state(
-                    user_id=user_id,
+                    user_id=str(user_id),
                     state=DialogState.START.name,
                     context={"name": f"{user_info.get('first_name', '')} {user_info.get('last_name', '')}".strip()},
                     temp_data={}
                 )
-                user_state = await self.storage.get_user_state(user_id)
+                user_state = await self.storage.get_user_state(str(user_id))
 
             logger.info(f"Текущее состояние пользователя {user_id}: {user_state.state}")
 
@@ -196,7 +197,7 @@ class VKService:
 
             # Обновляем состояние пользователя
             await self.storage.set_user_state(
-                user_id=user_id,
+                user_id=str(user_id),
                 state=new_state.name,
                 context=user_state.context,
                 temp_data=user_state.temp_data
@@ -204,7 +205,7 @@ class VKService:
 
             # Отправляем ответ пользователю
             keyboard = await self.build_keyboard(new_state, keyboard_data)
-            await self.send_message(int(user_id), response_text, keyboard)
+            await self.send_message(user_id, response_text, keyboard)
             logger.info(f"Ответ успешно отправлен пользователю {user_id}")
 
         except Exception as e:
