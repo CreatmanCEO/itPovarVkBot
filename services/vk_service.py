@@ -322,56 +322,60 @@ class VKService:
             logger.critical(f"Ошибка при обработке ошибки: {e}")
 
     async def cleanup_cache(self) -> None:
-        """Периодическая очистка кэша состояний"""
+        """
+        Периодическая очистка кэша состояний пользователей
+        """
         while True:
             try:
-                # Очищаем старые состояния из БД
-                deleted = await self.storage.cleanup_old_states(hours=24)
-                if deleted > 0:
-                    logger.info(f"Удалено {deleted} старых состояний")
+                await asyncio.sleep(3600)  # Очищаем раз в час
+                current_time = datetime.now()
                 
-                # Очищаем кэш
-                self.user_states_cache.clear()
-                
-                # Ждем 6 часов
-                await asyncio.sleep(6 * 60 * 60)
+                # Удаляем состояния пользователей, неактивных более 24 часов
+                to_remove = []
+                for user_id, state in self.user_states_cache.items():
+                    if (current_time - state.last_activity).total_seconds() > 86400:
+                        to_remove.append(user_id)
+                        
+                for user_id in to_remove:
+                    del self.user_states_cache[user_id]
+                    
+                logger.info(f"Очищено {len(to_remove)} неактивных состояний из кэша")
                 
             except Exception as e:
                 logger.error(f"Ошибка при очистке кэша: {e}")
-                await asyncio.sleep(60)  # Ждем минуту перед повторной попыткой
+                await asyncio.sleep(60)  # При ошибке ждем минуту перед повторной попыткой
 
     async def run(self) -> None:
-        """Запуск бота"""
+        """
+        Запуск прослушивания событий VK API
+        """
         logger.info("Запуск VK бота...")
         
-        # Запускаем задачу очистки кэша
-        self.cache_cleanup_task = asyncio.create_task(self.cleanup_cache())
-        
-        while True:
-            try:
-                # Создаем новый longpoll для каждой итерации
-                self.longpoll = VkBotLongPoll(self.vk_session, VK_GROUP_ID)
-                
-                # Слушаем события
-                for event in self.longpoll.listen():
+        try:
+            # Запускаем задачу очистки кэша
+            self.cache_cleanup_task = asyncio.create_task(self.cleanup_cache())
+            
+            # Основной цикл прослушивания событий
+            for event in self.longpoll.listen():
+                try:
+                    # Обрабатываем только сообщения
                     if event.type == VkBotEventType.MESSAGE_NEW:
-                        # Запускаем обработку сообщения в отдельной задаче
+                        # Создаем задачу для асинхронной обработки сообщения
                         asyncio.create_task(self.process_new_message(event))
                         
-            except Exception as e:
-                logger.error(f"Ошибка в основном цикле бота: {e}")
-                # Ждем перед повторным подключением
-                await asyncio.sleep(5)
+                except Exception as e:
+                    logger.error(f"Ошибка при обработке события: {e}", exc_info=True)
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"Критическая ошибка в работе бота: {e}", exc_info=True)
+            raise
             
-            finally:
-                # Отменяем задачу очистки кэша при выходе
-                if self.cache_cleanup_task:
-                    self.cache_cleanup_task.cancel()
-                    try:
-                        await self.cache_cleanup_task
-                    except asyncio.CancelledError:
-                        pass
-
+        finally:
+            # Останавливаем задачу очистки кэша
+            if self.cache_cleanup_task:
+                self.cache_cleanup_task.cancel()
+                
     async def stop(self) -> None:
         """Остановка бота"""
         logger.info("Остановка VK бота...")

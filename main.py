@@ -5,20 +5,13 @@ from pathlib import Path
 from aiohttp import web
 from flask import Flask, request, jsonify
 
-from config.config import APP_HOST, APP_PORT, DATABASE_PATH
+from config.config import APP_HOST, APP_PORT, DATABASE_PATH, LOGGING_CONFIG
 from services.vk_service import VKService
 from services.storage_service import StorageService
 from utils.helpers import PhoneNumberHelper, TextHelper
 
 # Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('bot.log')
-    ]
-)
+logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
 # Инициализация сервисов
@@ -80,50 +73,38 @@ async def handle_health_check(request):
     """Проверка работоспособности сервиса"""
     return web.Response(text="Service is running", status=200)
 
-async def start_vk_bot():
-    """Запуск бота ВКонтакте"""
-    try:
-        logger.info("Запуск VK бота...")
-        await vk_service.run()
-    except Exception as e:
-        logger.error(f"Критическая ошибка в работе VK бота: {e}")
-
 async def init_app():
     """Инициализация веб-приложения"""
     app = web.Application()
-    app.router.add_get('/', handle_health_check)  # Добавляем эндпоинт проверки работоспособности
+    app.router.add_get('/', handle_health_check)
     app.router.add_post('/submit', handle_form_submission)
     return app
+
+async def run_web_app():
+    """Запуск веб-приложения"""
+    app = await init_app()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, APP_HOST, APP_PORT)
+    await site.start()
+    logger.info(f"Веб-сервер запущен на {APP_HOST}:{APP_PORT}")
 
 async def main():
     """Основная функция запуска"""
     try:
-        # Создаем Flask приложение
-        flask_app = Flask(__name__)
+        # Запускаем веб-сервер
+        await run_web_app()
         
-        @flask_app.route('/')
-        def health_check():
-            return 'Service is running'
-
-        # Запускаем Flask в отдельном потоке
-        from threading import Thread
-        def run_flask():
-            flask_app.run(host=APP_HOST, port=APP_PORT)
-        
-        web_thread = Thread(target=run_flask, daemon=True)
-        web_thread.start()
-        
-        logger.info(f"Веб-сервер запущен на {APP_HOST}:{APP_PORT}")
-
         # Запускаем VK бота
-        bot_task = asyncio.create_task(start_vk_bot())
-        
-        # Ждем выполнения задачи бота
-        await bot_task
+        logger.info("Запуск VK бота...")
+        await vk_service.run()
         
     except Exception as e:
-        logger.error(f"Критическая ошибка: {e}")
+        logger.error(f"Критическая ошибка: {e}", exc_info=True)
         raise
+    finally:
+        # Останавливаем бота при выходе
+        await vk_service.stop()
 
 if __name__ == "__main__":
     try:
@@ -132,4 +113,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Завершение работы приложения...")
     except Exception as e:
-        logger.error(f"Неожиданная ошибка: {e}")
+        logger.error(f"Неожиданная ошибка: {e}", exc_info=True)
