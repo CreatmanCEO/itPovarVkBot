@@ -1,0 +1,26 @@
+{
+    "common": {
+        "welcome": "Welcome! I'm IT Cook bot, ready to help you with your IT tasks.",
+        "help": "How can I help you?",
+        "error": "An error occurred. Please try again later.",
+        "success": "Operation completed successfully!"
+    },
+    "orders": {
+        "new_order": "New Order",
+        "order_received": "Your order has been received! Order number: {order_id}",
+        "invalid_phone": "Invalid phone number format",
+        "missing_fields": "Please fill in all required fields"
+    },
+    "menu": {
+        "create_order": "Create Order",
+        "check_status": "Check Status",
+        "contact_support": "Contact Support",
+        "change_language": "Change Language"
+    },
+    "status": {
+        "new": "New",
+        "in_progress": "In Progress",
+        "completed": "Completed",
+        "cancelled": "Cancelled"
+    }
+} 
