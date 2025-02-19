@@ -1,66 +1,85 @@
-import logging
-from typing import Tuple, Optional, Dict, Any
-from datetime import datetime
+"""
+Обработчики диалогов для бота
+"""
 
-from .states import DialogState, STATE_TRANSITIONS
-from models.schemas import UserState, Order
+import logging
+from typing import Tuple, Dict, Any
+
+from .states import DialogState, STATE_MESSAGES, STATE_TRANSITIONS
+from .keyboard import KeyboardBuilder
+from models.schemas import UserState
 from services.storage_service import StorageService
 from utils.helpers import PhoneNumberHelper, TextHelper, DateTimeHelper, OrderHelper
 
 logger = logging.getLogger(__name__)
 
 class DialogHandler:
+    """Обработчик диалогов"""
+    
     def __init__(self, storage: StorageService):
         self.storage = storage
-
-    async def handle_state(self, user_state: UserState, message: str) -> Tuple[DialogState, str, Dict[str, Any]]:
+        
+    async def handle_state(
+        self,
+        user_state: UserState,
+        message: str
+    ) -> Tuple[DialogState, str, Dict[str, Any]]:
         """
-        Обработка сообщения в зависимости от текущего состояния
+        Обработка текущего состояния диалога
         
         Args:
             user_state: Текущее состояние пользователя
-            message: Текст сообщения
-        
+            message: Сообщение от пользователя
+            
         Returns:
-            Tuple[DialogState, str, Dict]: (новое состояние, сообщение для пользователя, данные для клавиатуры)
+            Tuple[DialogState, str, Dict[str, Any]]: 
+            - Новое состояние
+            - Текст ответа
+            - Данные для клавиатуры
         """
         try:
             current_state = DialogState[user_state.state]
+            logger.info(f"Обработка состояния {current_state} с сообщением: {message}")
             
-            # Проверяем команду отмены
-            if message.lower() == "отменить":
-                return await self.handle_cancel(user_state)
+            # Проверяем глобальные команды
+            if message.startswith('/'):
+                command = message.lower()
+                if command == '/start':
+                    return DialogState.START, STATE_MESSAGES[DialogState.START], {"show_start": True}
+                elif command == '/menu':
+                    return DialogState.MAIN_MENU, STATE_MESSAGES[DialogState.MAIN_MENU], {"show_main_menu": True}
+                elif command == '/help':
+                    return DialogState.HELP, STATE_MESSAGES[DialogState.HELP], {"show_help": True}
+                elif command == '/cancel':
+                    return DialogState.CANCEL_CONFIRMATION, STATE_MESSAGES[DialogState.CANCEL_CONFIRMATION], {"show_cancel": True}
             
-            # Проверяем команду "назад"
-            if message.lower() == "назад":
-                return await self.handle_back(user_state)
-
             # Обработка состояний
-            handlers = {
-                DialogState.START: self.handle_start,
-                DialogState.MAIN_MENU: self.handle_main_menu,
-                DialogState.CHOOSING_SERVICE_TYPE: self.handle_service_choice,
-                DialogState.BUSINESS_TYPE_INPUT: self.handle_business_type,
-                DialogState.BUSINESS_TASK_INPUT: self.handle_business_task,
-                DialogState.PERSONAL_TASK_INPUT: self.handle_personal_task,
-                DialogState.CONTACT_INPUT: self.handle_contact_input,
-                DialogState.ORDER_CONFIRMATION: self.handle_confirmation,
-                DialogState.VIEWING_ORDERS: self.handle_viewing_orders,
-                DialogState.ORDER_MANAGEMENT: self.handle_order_management,
-                DialogState.ORDER_EDITING: self.handle_order_editing
-            }
+            if current_state == DialogState.START:
+                return DialogState.MAIN_MENU, STATE_MESSAGES[DialogState.MAIN_MENU], {"show_main_menu": True}
+                
+            elif current_state == DialogState.MAIN_MENU:
+                if "заявк" in message.lower():
+                    return DialogState.CHOOSING_SERVICE_TYPE, STATE_MESSAGES[DialogState.CHOOSING_SERVICE_TYPE], {"show_service_types": True}
+                elif "помощь" in message.lower():
+                    return DialogState.HELP, STATE_MESSAGES[DialogState.HELP], {"show_help": True}
+                else:
+                    return current_state, "Выберите действие из меню:", {"show_main_menu": True}
+                    
+            elif current_state == DialogState.CHOOSING_SERVICE_TYPE:
+                if "населен" in message.lower():
+                    return DialogState.PERSONAL_TASK_INPUT, STATE_MESSAGES[DialogState.PERSONAL_TASK_INPUT], {"show_back": True}
+                elif "бизнес" in message.lower():
+                    return DialogState.BUSINESS_TYPE_INPUT, STATE_MESSAGES[DialogState.BUSINESS_TYPE_INPUT], {"show_back": True}
+                else:
+                    return current_state, "Пожалуйста, выберите тип услуг:", {"show_service_types": True}
             
-            handler = handlers.get(current_state)
-            if handler:
-                return await handler(user_state, message)
-            
-            # Если не нашли обработчик, возвращаемся в главное меню
-            logger.warning(f"Неизвестное состояние: {current_state}")
-            return DialogState.MAIN_MENU, "Давайте начнем сначала. Выберите действие:", {"show_main_menu": True}
+            # Если состояние не обработано, возвращаемся в главное меню
+            logger.warning(f"Необработанное состояние {current_state}")
+            return DialogState.MAIN_MENU, STATE_MESSAGES[DialogState.MAIN_MENU], {"show_main_menu": True}
             
         except Exception as e:
-            logger.error(f"Ошибка при обработке состояния: {e}")
-            return DialogState.MAIN_MENU, "Произошла ошибка. Давайте попробуем сначала:", {"show_main_menu": True}
+            logger.error(f"Ошибка при обработке состояния: {e}", exc_info=True)
+            return DialogState.ERROR_HANDLING, STATE_MESSAGES[DialogState.ERROR_HANDLING], {"show_error": True}
 
     async def handle_start(self, user_state: UserState, message: str) -> Tuple[DialogState, str, Dict[str, Any]]:
         """Обработка начального состояния"""

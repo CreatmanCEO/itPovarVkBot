@@ -163,15 +163,20 @@ class VKService:
         Args:
             event: Событие от VK API
         """
+        user_id = None
         try:
             user_id = event.message.from_id
             message_text = event.message.text or ""
             
-            logger.info(f"Получено сообщение от пользователя {user_id}: {message_text}")
+            logger.info(f"Начало обработки сообщения от пользователя {user_id}: {message_text}")
             
             # Получаем состояние пользователя
-            user_state = await self.get_or_create_user_state(user_id)
-            logger.info(f"Текущее состояние пользователя {user_id}: {user_state.state}")
+            try:
+                user_state = await self.get_or_create_user_state(user_id)
+                logger.info(f"Получено состояние пользователя {user_id}: {user_state.state}")
+            except Exception as e:
+                logger.error(f"Ошибка при получении состояния пользователя {user_id}: {e}", exc_info=True)
+                raise
             
             # Обрабатываем служебные команды
             if message_text.lower() == "отменить заявку":
@@ -185,90 +190,151 @@ class VKService:
                 return
 
             # Обрабатываем состояние через dialog_handler
-            new_state, response_message, keyboard_data = await self.dialog_handler.handle_state(
-                user_state,
-                message_text
-            )
-            logger.info(f"Новое состояние для {user_id}: {new_state}")
+            try:
+                logger.info(f"Обработка состояния через dialog_handler для пользователя {user_id}")
+                new_state, response_message, keyboard_data = await self.dialog_handler.handle_state(
+                    user_state,
+                    message_text
+                )
+                logger.info(f"Получен ответ от dialog_handler: state={new_state}, message={response_message[:100]}...")
+            except Exception as e:
+                logger.error(f"Ошибка при обработке состояния пользователя {user_id}: {e}", exc_info=True)
+                raise
 
             # Отправляем приветственное сообщение для нового пользователя
             if user_state.state == DialogState.START.name and not user_state.context.get("greeted"):
+                logger.info(f"Отправка приветственного сообщения пользователю {user_id}")
                 welcome_message = "Здравствуйте! Я бот IT-Помощь. Чем могу помочь?"
                 await self.send_message(user_id, welcome_message)
                 user_state.context["greeted"] = True
 
             # Обновляем состояние пользователя
-            user_state.state = new_state.name
-            await self.storage.set_user_state(
-                str(user_id), 
-                user_state.state, 
-                user_state.context,
-                user_state.temp_data
-            )
-            
-            # Обновляем кэш
-            self.user_states_cache[user_id] = user_state
+            try:
+                logger.info(f"Обновление состояния пользователя {user_id} на {new_state.name}")
+                user_state.state = new_state.name
+                await self.storage.set_user_state(
+                    str(user_id), 
+                    user_state.state, 
+                    user_state.context,
+                    user_state.temp_data
+                )
+                self.user_states_cache[user_id] = user_state
+            except Exception as e:
+                logger.error(f"Ошибка при обновлении состояния пользователя {user_id}: {e}", exc_info=True)
+                raise
 
             # Формируем и отправляем ответ
-            keyboard = await self.build_keyboard(new_state, keyboard_data)
-            logger.info(f"Отправляем ответ пользователю {user_id}: {response_message[:100]}...")
-            await self.send_message(user_id, response_message, keyboard)
+            try:
+                logger.info(f"Формирование клавиатуры для пользователя {user_id}")
+                keyboard = await self.build_keyboard(new_state, keyboard_data)
+                
+                logger.info(f"Отправка ответа пользователю {user_id}")
+                success = await self.send_message(user_id, response_message, keyboard)
+                if success:
+                    logger.info(f"Ответ успешно отправлен пользователю {user_id}")
+                else:
+                    logger.error(f"Не удалось отправить ответ пользователю {user_id}")
+            except Exception as e:
+                logger.error(f"Ошибка при отправке ответа пользователю {user_id}: {e}", exc_info=True)
+                raise
             
         except Exception as e:
-            logger.error(f"Ошибка при обработке сообщения: {e}", exc_info=True)
-            await self.handle_error(user_id, e)
+            error_msg = f"Ошибка при обработке сообщения от пользователя {user_id}: {e}"
+            logger.error(error_msg, exc_info=True)
+            if user_id:
+                await self.handle_error(user_id, error_msg)
 
     async def build_keyboard(self, state: DialogState, data: Dict[str, Any]) -> dict:
         """
-        Формирование клавиатуры в зависимости от состояния
+        Создание клавиатуры для текущего состояния
         
         Args:
             state: Текущее состояние диалога
-            data: Дополнительные данные для клавиатуры
+            data: Данные для формирования клавиатуры
             
         Returns:
-            dict: Структура клавиатуры для VK API
+            dict: Клавиатура в формате VK API
         """
-        buttons = []
-        
-        # Основные кнопки в зависимости от состояния
-        if data.get("show_main_menu"):
-            buttons.extend(["Создать заявку", "Мои заявки"])
+        try:
+            logger.debug(f"Создание клавиатуры для состояния {state} с данными {data}")
             
-        elif data.get("show_service_types"):
-            buttons.extend(["Услуги Населению", "Услуги для Бизнеса"])
+            buttons = []
             
-        elif data.get("show_confirmation"):
-            buttons.extend(["Отправить заявку", "Изменить заявку"])
+            # Добавляем кнопки в зависимости от флагов
+            if data.get("show_start"):
+                buttons.extend(["Начать", "Помощь"])
+                
+            elif data.get("show_main_menu"):
+                buttons.extend([
+                    "Создать заявку",
+                    "Мои заявки",
+                    "Помощь"
+                ])
+                
+            elif data.get("show_service_types"):
+                buttons.extend([
+                    "Услуги Населению",
+                    "Услуги для Бизнеса",
+                    "Назад"
+                ])
+                
+            elif data.get("show_help"):
+                buttons.extend([
+                    "Создать заявку",
+                    "Мои заявки",
+                    "Назад в меню"
+                ])
+                
+            elif data.get("show_cancel"):
+                buttons.extend([
+                    "Да, отменить",
+                    "Нет, продолжить",
+                    "В главное меню"
+                ])
+                
+            elif data.get("show_error"):
+                buttons.extend([
+                    "Повторить",
+                    "Помощь",
+                    "В главное меню"
+                ])
             
-        elif data.get("show_order_actions"):
-            buttons.extend(["Изменить заявку", "Удалить заявку"])
+            # Добавляем кнопку "Назад" если нужно
+            if data.get("show_back") and "Назад" not in buttons:
+                buttons.append("Назад")
+                
+            # Если кнопок нет, добавляем кнопку возврата в меню
+            if not buttons:
+                buttons.append("В главное меню")
             
-        # Добавляем кнопки заявок, если есть
-        if data.get("orders"):
-            buttons.extend([f"Заявка №{order['id']}" for order in data["orders"]])
+            # Формируем клавиатуру
+            keyboard = {
+                "one_time": False,
+                "buttons": [[{
+                    "action": {
+                        "type": "text",
+                        "label": btn[:40]  # Ограничение VK API
+                    },
+                    "color": "primary" if btn not in ["Отменить", "Назад", "В главное меню"] else "secondary"
+                }] for btn in buttons]
+            }
             
-        # Добавляем кнопку создания новой заявки
-        if data.get("show_new_order"):
-            buttons.append("Создать новую заявку")
+            logger.debug(f"Создана клавиатура с кнопками: {buttons}")
+            return keyboard
             
-        # Добавляем кнопку "Назад" если нужно
-        if data.get("show_back") and state not in [DialogState.START, DialogState.MAIN_MENU]:
-            buttons.append("Назад")
-            
-        # Формируем структуру клавиатуры
-        keyboard = {
-            "one_time": True,
-            "buttons": [[{
-                "action": {
-                    "type": "text",
-                    "label": btn
-                },
-                "color": "primary"
-            }] for btn in buttons]
-        }
-        
-        return keyboard
+        except Exception as e:
+            logger.error(f"Ошибка при создании клавиатуры: {e}", exc_info=True)
+            # Возвращаем базовую клавиатуру с кнопкой меню
+            return {
+                "one_time": False,
+                "buttons": [[{
+                    "action": {
+                        "type": "text",
+                        "label": "В главное меню"
+                    },
+                    "color": "secondary"
+                }]]
+            }
 
     async def handle_cancel(self, user_id: int, user_state: UserState) -> None:
         """Обработка отмены создания заявки"""
@@ -333,33 +399,19 @@ class VKService:
             logger.error(f"Ошибка при удалении заявки: {e}")
             await self.handle_error(user_id, e)
 
-    async def handle_error(self, user_id: int, error: Exception) -> None:
-        """Обработка ошибок"""
+    async def handle_error(self, user_id: int, error: str) -> None:
+        """Обработка ошибок при работе с сообщениями"""
         try:
-            # Логируем ошибку
-            logger.error(f"Ошибка при обработке запроса от пользователя {user_id}: {error}")
+            error_message = "Произошла ошибка при обработке вашего сообщения. Попробуйте еще раз или напишите /start для перезапуска бота."
+            await self.send_message(user_id, error_message)
             
-            # Отправляем сообщение пользователю
-            keyboard = await self.build_keyboard(
-                DialogState.MAIN_MENU,
-                {"show_main_menu": True}
-            )
-            await self.send_message(
-                user_id,
-                "Произошла ошибка. Пожалуйста, попробуйте позже или начните сначала.",
-                keyboard
-            )
-            
-            # Уведомляем администратора через Telegram
-            error_details = {
+            # Отправляем уведомление об ошибке в Telegram
+            await TelegramService.notify_error("message_processing", {
                 "user_id": user_id,
-                "error_type": type(error).__name__,
-                "error_message": str(error)
-            }
-            await TelegramService.notify_error("bot_error", error_details)
-            
+                "error": str(error)
+            })
         except Exception as e:
-            logger.critical(f"Ошибка при обработке ошибки: {e}")
+            logger.error(f"Ошибка при обработке ошибки для пользователя {user_id}: {e}", exc_info=True)
 
     async def cleanup_cache(self) -> None:
         """
