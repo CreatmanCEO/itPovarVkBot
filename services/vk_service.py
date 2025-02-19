@@ -174,6 +174,29 @@ class VKService:
             try:
                 user_state = await self.get_or_create_user_state(user_id)
                 logger.info(f"Получено состояние пользователя {user_id}: {user_state.state}")
+                
+                # Если это новый пользователь или состояние START, отправляем приветствие
+                if not user_state.context.get("greeted"):
+                    logger.info(f"Отправка приветственного сообщения пользователю {user_id}")
+                    welcome_message = (
+                        "Здравствуйте! Я бот IT-Помощь в Поварово.\n\n"
+                        "Я могу помочь вам:\n"
+                        "• Создать заявку на IT-услуги\n"
+                        "• Просмотреть ваши текущие заявки\n"
+                        "• Отследить статус заявки\n"
+                        "• Получить консультацию\n\n"
+                        "Используйте кнопки меню для навигации или следующие команды:\n"
+                        "• /start - Начать сначала\n"
+                        "• /menu - Вернуться в главное меню\n"
+                        "• /help - Получить помощь\n"
+                        "• /cancel - Отменить текущее действие"
+                    )
+                    keyboard = await self.build_keyboard(DialogState.START, {"show_start": True})
+                    await self.send_message(user_id, welcome_message, keyboard)
+                    user_state.context["greeted"] = True
+                    await self.storage.set_user_state(str(user_id), user_state.state, user_state.context)
+                    return
+                    
             except Exception as e:
                 logger.error(f"Ошибка при получении состояния пользователя {user_id}: {e}", exc_info=True)
                 raise
@@ -200,13 +223,6 @@ class VKService:
             except Exception as e:
                 logger.error(f"Ошибка при обработке состояния пользователя {user_id}: {e}", exc_info=True)
                 raise
-
-            # Отправляем приветственное сообщение для нового пользователя
-            if user_state.state == DialogState.START.name and not user_state.context.get("greeted"):
-                logger.info(f"Отправка приветственного сообщения пользователю {user_id}")
-                welcome_message = "Здравствуйте! Я бот IT-Помощь. Чем могу помочь?"
-                await self.send_message(user_id, welcome_message)
-                user_state.context["greeted"] = True
 
             # Обновляем состояние пользователя
             try:
