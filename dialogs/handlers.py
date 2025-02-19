@@ -10,6 +10,7 @@ from .keyboard import KeyboardBuilder
 from models.schemas import UserState
 from services.storage_service import StorageService
 from utils.helpers import PhoneNumberHelper, TextHelper, DateTimeHelper, OrderHelper
+from services.telegram_service import TelegramService
 
 logger = logging.getLogger(__name__)
 
@@ -172,10 +173,15 @@ class DialogHandler:
     async def handle_personal_task(self, user_state: UserState, message: str) -> Tuple[DialogState, str, Dict[str, Any]]:
         """Обработка ввода личной задачи"""
         message = TextHelper.clean_text(message)
-        if not message:
+        if not message or len(message.strip()) < 10:
             return (
                 DialogState.PERSONAL_TASK_INPUT,
-                "Пожалуйста, опишите вашу задачу:",
+                "Пожалуйста, опишите вашу задачу подробнее (минимум 10 символов):\n\n"
+                "Например:\n"
+                "- Нужна помощь с настройкой принтера\n"
+                "- Не работает интернет\n"
+                "- Требуется обучение работе с Excel\n\n"
+                "Для отмены введите /cancel",
                 {"show_back": True}
             )
             
@@ -224,6 +230,12 @@ class DialogHandler:
                 task=user_state.temp_data["task"],
                 business_type=user_state.temp_data.get("business_type")
             )
+            
+            # Получаем созданную заявку
+            order = await self.storage.get_order(order_id)
+            if order:
+                # Отправляем уведомление в Telegram
+                await TelegramService.notify_new_order(order)
             
             # Очищаем временные данные
             user_state.temp_data = {}

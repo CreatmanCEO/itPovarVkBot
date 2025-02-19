@@ -156,113 +156,63 @@ class VKService:
         self.user_states_cache[user_id] = state
         return state
         
-    async def process_new_message(self, event) -> None:
-        """
-        Обработка нового сообщения
-        
-        Args:
-            event: Событие от VK API
-        """
-        user_id = None
+    async def process_new_message(self, event: Dict[str, Any]) -> None:
+        """Обработка нового сообщения"""
         try:
-            user_id = event.message.from_id
-            message_text = event.message.text or ""
-            
-            logger.info(f"Начало обработки сообщения от пользователя {user_id}: {message_text}")
-            
-            # Получаем состояние пользователя
-            try:
-                user_state = await self.get_or_create_user_state(user_id)
-                logger.info(f"Получено состояние пользователя {user_id}: {user_state.state}")
-                
-                # Если это новый пользователь или состояние START, отправляем приветствие
-                if not user_state.context.get("greeted"):
-                    logger.info(f"Отправка приветственного сообщения пользователю {user_id}")
-                    welcome_message = (
-                        "Здравствуйте! Я бот IT-Помощь в Поварово.\n\n"
-                        "Я могу помочь вам:\n"
-                        "• Создать заявку на IT-услуги\n"
-                        "• Просмотреть ваши текущие заявки\n"
-                        "• Отследить статус заявки\n"
-                        "• Получить консультацию\n\n"
-                        "Используйте кнопки меню для навигации или следующие команды:\n"
-                        "• /start - Начать сначала\n"
-                        "• /menu - Вернуться в главное меню\n"
-                        "• /help - Получить помощь\n"
-                        "• /cancel - Отменить текущее действие"
-                    )
-                    await self.send_message(user_id, welcome_message)
-                    user_state.context["greeted"] = True
-                    await self.storage.set_user_state(str(user_id), user_state.state, user_state.context)
-                    
-                    # Показываем основное меню после приветствия
-                    menu_message = "Выберите действие:"
-                    keyboard = await self.build_keyboard(DialogState.MAIN_MENU, {"show_main_menu": True})
-                    await self.send_message(user_id, menu_message, keyboard)
-                    return
-                    
-            except Exception as e:
-                logger.error(f"Ошибка при получении состояния пользователя {user_id}: {e}", exc_info=True)
-                raise
-            
-            # Обрабатываем служебные команды
-            if message_text.lower() == "отменить заявку":
-                logger.info(f"Пользователь {user_id} отменяет заявку")
-                await self.handle_cancel(user_id, user_state)
-                return
-                
-            if message_text.lower() == "удалить заявку":
-                logger.info(f"Пользователь {user_id} удаляет заявку")
-                await self.handle_delete_order(user_id, user_state)
+            user_id = str(event['message']['from_id'])
+            message_text = event['message']['text']
+            logger.info(f"Получено новое сообщение от пользователя {user_id}: {message_text}")
+
+            # Получаем информацию о пользователе
+            user_info = await self.get_user_info(user_id)
+            if not user_info:
+                logger.error(f"Не удалось получить информацию о пользователе {user_id}")
                 return
 
-            # Обрабатываем состояние через dialog_handler
-            try:
-                logger.info(f"Обработка состояния через dialog_handler для пользователя {user_id}")
-                new_state, response_message, keyboard_data = await self.dialog_handler.handle_state(
-                    user_state,
-                    message_text
+            logger.info(f"Информация о пользователе {user_id}: {user_info}")
+
+            # Получаем текущее состояние пользователя
+            user_state = await self.storage.get_user_state(user_id)
+            if not user_state:
+                logger.info(f"Создаем новое состояние для пользователя {user_id}")
+                await self.storage.set_user_state(
+                    user_id=user_id,
+                    state=DialogState.START.name,
+                    context={"name": user_info["name"]},
+                    temp_data={}
                 )
-                logger.info(f"Получен ответ от dialog_handler: state={new_state}, message={response_message[:100]}...")
-            except Exception as e:
-                logger.error(f"Ошибка при обработке состояния пользователя {user_id}: {e}", exc_info=True)
-                raise
+                user_state = await self.storage.get_user_state(user_id)
+
+            logger.info(f"Текущее состояние пользователя {user_id}: {user_state.state}")
+
+            # Обрабатываем сообщение через DialogHandler
+            new_state, response_text, keyboard_data = await self.dialog_handler.handle_state(
+                user_state=user_state,
+                message=message_text
+            )
+
+            logger.info(f"Новое состояние пользователя {user_id}: {new_state}")
+            logger.info(f"Подготовлен ответ для пользователя {user_id}: {response_text}")
 
             # Обновляем состояние пользователя
-            try:
-                logger.info(f"Обновление состояния пользователя {user_id} на {new_state.name}")
-                user_state.state = new_state.name
-                await self.storage.set_user_state(
-                    str(user_id), 
-                    user_state.state, 
-                    user_state.context,
-                    user_state.temp_data
-                )
-                self.user_states_cache[user_id] = user_state
-            except Exception as e:
-                logger.error(f"Ошибка при обновлении состояния пользователя {user_id}: {e}", exc_info=True)
-                raise
+            await self.storage.set_user_state(
+                user_id=user_id,
+                state=new_state.name,
+                context=user_state.context,
+                temp_data=user_state.temp_data
+            )
 
-            # Формируем и отправляем ответ
-            try:
-                logger.info(f"Формирование клавиатуры для пользователя {user_id}")
-                keyboard = await self.build_keyboard(new_state, keyboard_data)
-                
-                logger.info(f"Отправка ответа пользователю {user_id}")
-                success = await self.send_message(user_id, response_message, keyboard)
-                if success:
-                    logger.info(f"Ответ успешно отправлен пользователю {user_id}")
-                else:
-                    logger.error(f"Не удалось отправить ответ пользователю {user_id}")
-            except Exception as e:
-                logger.error(f"Ошибка при отправке ответа пользователю {user_id}: {e}", exc_info=True)
-                raise
-            
+            # Отправляем ответ пользователю
+            keyboard = self.build_keyboard(keyboard_data)
+            await self.send_message(user_id, response_text, keyboard)
+            logger.info(f"Ответ успешно отправлен пользователю {user_id}")
+
         except Exception as e:
-            error_msg = f"Ошибка при обработке сообщения от пользователя {user_id}: {e}"
-            logger.error(error_msg, exc_info=True)
-            if user_id:
-                await self.handle_error(user_id, error_msg)
+            logger.error(f"Ошибка при обработке сообщения: {str(e)}", exc_info=True)
+            await TelegramService.notify_error("message_processing", {
+                "user_id": user_id if 'user_id' in locals() else "unknown",
+                "error": str(e)
+            })
 
     async def build_keyboard(self, state: DialogState, data: Dict[str, Any]) -> dict:
         """
